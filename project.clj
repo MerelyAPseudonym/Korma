@@ -36,6 +36,6 @@
                                   [mysql/mysql-connector-java "5.1.22"]
                                   [com.h2database/h2 "1.3.164"]
                                   [criterium "0.3.1"]]}}
-  :aliases {"run-tests" ["with-profile" "1.3.0:1.4.0:1.5.0" "test"]
+  :aliases {"run-tests" ["with-profile" "1.3:1.4:1.5" "test"]
             "slamhound" ["run" "-m" "slam.hound"]}
   :jvm-opts ["-Dline.separator=\n"])
