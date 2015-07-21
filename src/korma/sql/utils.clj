@@ -1,61 +1,81 @@
 (ns ^{:no-doc true}
   korma.sql.utils
-  (:require [clojure.string :as string]))
+  (:require [clojure.string :as string]
+            [clojure.core.typed :as typed
+                                :refer [ann ann-form All U Any
+                                        Option Seqable AVec
+                                        NonEmptyASeq
+                                        SequentialSeqable]]))
 
 ;;*****************************************************
 ;; map-types
 ;;*****************************************************
-
+(ann generated (All [x]
+                 [x -> '{::generated x}]))
 (defn generated [s]
   {::generated s})
 
+(ann sub-query (All [x]
+                 [x -> '{::sub x}]))
 (defn sub-query [s]
   {::sub s})
 
+(ann pred (All [x y]
+            [x y -> '{::pred x, ::args y}]))
 (defn pred [p args]
   {::pred p ::args args})
 
+(ann func (All [x y]
+            [x y -> '{::func x, ::args y}]))
 (defn func [f args]
   {::func f ::args args})
 
-(defn func? [m]
+
+(typed/defn func? [m]
   (::func m))
 
-(defn pred? [m]
+(typed/defn pred? [m]
   (::pred m))
 
-(defn args? [m]
+(typed/defn args? [m]
   (::args m))
 
-(defn sub-query? [m]
+(typed/defn sub-query? [m]
   (::sub m))
 
-(defn generated? [m]
+(typed/defn generated? [m]
   (::generated m))
 
-(defn special-map? [m]
-  (boolean (some #(% m) [func? pred? sub-query? generated?])))
+
+(typed/defn special-map? [m]
+  (boolean (some (typed/fn [pred :- [Any -> Any]]
+                   (pred m))
+                 [func? pred? sub-query? generated?])))
 
 ;;*****************************************************
 ;; str-utils
 ;;*****************************************************
-
+(ann comma-separated (All [x]
+                       [(Option (Seqable x)) -> String]))
 (defn comma-separated [vs]
   (string/join ", " vs))
 
-(defn wrap [v]
+(typed/defn wrap [v] :- String
   (str "(" v ")"))
 
-(defn left-assoc [vs]
-  (loop [ret "" [v & vs] vs]
-    (cond
-      (nil? v) ret
-      (nil? vs) (str ret v)
-      :else (recur (wrap (str ret v)) vs))))
+(typed/defn left-assoc :forall [x] [vs :- (Option (SequentialSeqable x))]
+  (typed/loop [ret :- String, ""
+               vs  :- (Option (SequentialSeqable x)), vs]
+    (let [[v & vs] vs]
+      (cond
+        (nil? v) ret
+        (nil? vs) (str ret v)
+        :else (recur (wrap (str ret v)) vs)))))
 
 ;;*****************************************************
 ;; collection-utils
 ;;*****************************************************
-
-(defn vconcat [v1 v2]
+(typed/defn vconcat :forall [x y]
+  [v1 :- (Option (Seqable x)),
+   v2 :- (Option (Seqable y))] :- (AVec (U x y))
   (vec (concat v1 v2)))
