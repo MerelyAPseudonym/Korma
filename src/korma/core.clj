@@ -4,10 +4,10 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [korma.db :as db]
-            [korma.sql.engine :as eng]
+            [korma.sql.engine :as eng
+                              :refer [bind-query]]
             [korma.sql.fns :as sfns]
-            [korma.sql.utils :as utils])
-  (:use [korma.sql.engine :only [bind-query]]))
+            [korma.sql.utils :as utils]))
 
 (def ^{:dynamic true} *exec-mode* false)
 (declare get-rel)
