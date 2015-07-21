@@ -12,14 +12,16 @@
           :src-linenum-anchor-prefix "L"}
 
   :dependencies [[org.clojure/clojure "1.7.0"]
-                 [org.clojure/core.typed.rt ~core.typed-version]
+                 ;; [org.clojure/core.typed.rt ~core.typed-version]
+                 [org.clojure/core.typed.rt "0.3.7"]
                  [c3p0/c3p0 "0.9.1.2"]
                  [org.clojure/java.jdbc "0.3.7"]]
 
   :min-lein-version "2.0.0"
 
   :profiles {:dev {:dependencies [[gui-diff "0.6.6"]
-                                  [org.clojure/core.typed ~core.typed-version]
+                                  ;; [org.clojure/core.typed ~core.typed-version]
+                                  [org.clojure/core.typed "0.3.7"]
                                   [postgresql "9.3-1102.jdbc41"]
                                   [slamhound "1.5.5"]
                                   [criterium "0.4.3"]]
