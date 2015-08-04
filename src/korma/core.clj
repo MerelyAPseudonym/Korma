@@ -2,12 +2,15 @@
   "Core querying and entity functions"
   (:refer-clojure :exclude [update])
   (:require [clojure.set :as set]
+            [clojure.core.typed :as t]
+            [clojure.core.typed :as typed :refer [defalias All TFn IFn CountRange HSequential EmptySeqable NonEmptySeqable U HMap Any ann Keyword]]
             [clojure.string :as string]
             [korma.db :as db]
             [korma.sql.engine :as eng
-                              :refer [bind-query]]
+             :refer [bind-query]]
             [korma.sql.fns :as sfns]
-            [korma.sql.utils :as utils]))
+            [korma.sql.utils :as utils])
+  (:import (clojure.core.typed.type_rep HSequential)))
 
 (def ^{:dynamic true} *exec-mode* false)
 (declare get-rel)
@@ -16,6 +19,58 @@
 ;; Query types
 ;;*****************************************************
 
+(defalias Enumy (U Any ':select ':update ':delete ':insert
+                       ':union ':union-all ':intersect
+                   ':results))
+(defalias First (All [x]
+                  (IFn [(HSequential [x Any *]) -> x
+                        :object {:id 0 :path [(Nth 0)]}]
+                       [(t/Option (EmptySeqable x)) -> nil]
+                       [(NonEmptySeqable x) -> x]
+                       [(t/Option (t/Seqable x)) -> (t/Option x)])))
+(defalias IDontKnowYet Any)
+(defalias PartiallyInstantiatedEntity (HMap :mandatory {:table String}
+                                            :optional {:alias IDontKnowYet
+                                                       :db IDontKnowYet}))
+(defalias Entity (HMap :mandatory {:table String}
+                       :optional {:name String
+                                  :pk (t/List t/Keyword)
+                                  :alias IDontKnowYet
+                                  :db IDontKnowYet
+
+                                  }))
+(defalias PartiallyInstantiatedEntity '{:ent Entity
+                                        :table String
+                                        :db IDontKnowYet
+                                        :alias IDontKnowYet})
+
+(defalias UUIQuery '{:type nil, :queries nil, :order nil, :results nil})
+
+
+(defalias QueryType (U ':select ':update ':delete ':insert ':union ':union-all ':intersect))
+(defalias TableName String)
+(defalias Query (HMap :mandatory {:ent   Entity
+                                  :table String
+                                  :db    IDontKnowYet
+                                  :alias IDontKnowYet}
+                      :optional {:type         QueryType
+                                 :queries      (t/Vec IDontKnowYet)
+                                 :fields       (t/Vec t/Keyword)
+                                 :from         (t/Vec Entity)
+                                 :modifiers    (t/Vec IDontKnowYet)
+                                 :joins        (t/Vec IDontKnowYet)
+                                 :where        (t/Vec IDontKnowYet)
+                                 :order        (t/Vec IDontKnowYet)
+                                 :aliases      (t/Set IDontKnowYet)
+                                 :group        (t/Vec IDontKnowYet)
+                                 :results      (U ':results ':keys)
+                                 :set-fields   (t/Map IDontKnowYet)
+                                 :having       IDontKnowYet
+                                 :values       (t/Vec (U (t/Vec HMap)
+                                                         HMap))
+                                 :post-queries (t/Vec First)}))
+
+(ann empty-query [(U t/Keyword String Entity) -> Query])
 (defn empty-query [ent]
   (let [ent (if (keyword? ent)
               (name ent)
@@ -35,11 +90,21 @@
        (let [~'this-query (empty-query ent#)]
          (merge ~'this-query ~m)))))
 
+(defalias SelectQuery '{:type ':select
+                        :fields IDontKnowYet
+                        :from (t/Vec Entity)
+                        :modifiers (t/Vec IDontKnowYet)
+                        :joins (t/Vec IDontKnowYet)
+                        :where (t/Vec IDontKnowYet)
+                        :order (t/Vec IDontKnowYet)
+                        :aliases (t/Set IDontKnowYet)
+                        :group (t/Vec IDontKnowYet)
+                        :results ':results})
 (defn select*
   "Create a select query with fields provided in Ent.  If fields are not provided,
   create an empty select query. Ent can either be an entity defined by defentity,
   or a string of the table name"
-  [ent]
+  [ent :- Entity] :- SelectQuery
   (let [default-fields (not-empty (:fields ent))]
     (make-query ent {:type :select
                      :fields (or default-fields [::*])
@@ -52,6 +117,11 @@
                      :group []
                      :results :results})))
 
+(defalias UpdateQuery '{:type ':update
+                        :fields (t/Map IDontKnowYet)
+                        :where (t/Vec IDontKnowYet)
+                        :post-queries (t/Vec First)})
+(ann update* [(U Entity TableName) -> UpdateQuery])
 (defn update*
   "Create an empty update query. Ent can either be an entity defined by defentity,
   or a string of the table name."
@@ -61,6 +131,10 @@
                    :where []
                    :post-queries [first]}))
 
+(defalias DeleteQuery '{:type         ':delete
+                        :where        (t/Vec IDontKnowYet)
+                        :post-queries (t/Vec First)})
+(ann delete* [(U Entity TableName) -> DeleteQuery])
 (defn delete*
   "Create an empty delete query. Ent can either be an entity defined by defentity,
   or a string of the table name"
@@ -69,6 +143,10 @@
                    :where []
                    :post-queries [first]}))
 
+(defalias InsertQuery '{:type    ':insert
+                        :values  (t/Vec IDontKnowYet)
+                        :results ':keys})
+(ann insert* [(U Entity TableName) -> InsertQuery])
 (defn insert*
   "Create an empty insert query. Ent can either be an entity defined by defentity,
   or a string of the table name"
@@ -77,25 +155,37 @@
                    :values []
                    :results :keys}))
 
-(defn union*
+(defalias UnionQuery '{:type ':union
+                       :queries (t/Vec IDontKnowYet)
+                       :order (t/Vec IDontKnowYet)
+                       :results ':results})
+(typed/defn union*
   "Create an empty union query."
-  []
+  [] :- UnionQuery
   {:type :union
    :queries []
    :order []
    :results :results})
 
-(defn union-all*
+(defalias UnionAllQuery '{:type ':union-all
+                          :queries (t/Vec IDontKnowYet)
+                          :order (t/Vec IDontKnowYet)
+                          :results ':results})
+(typed/defn union-all*
   "Create an empty union-all query."
-  []
+  [] :- UnionAllQuery
   {:type :union-all
    :queries []
    :order []
    :results :results})
 
-(defn intersect*
+(defalias IntersectQuery '{:type ':intersect
+                           :queries (t/Vec IDontKnowYet)
+                           :order (t/Vec IDontKnowYet)
+                           :results ':results})
+(typed/defn intersect*
   "Create an empty intersect query."
-  []
+  [] :- IntersectQuery
   {:type :intersect
    :queries []
    :order []
@@ -196,13 +286,18 @@
 ;;*****************************************************
 ;; Query parts
 ;;*****************************************************
-
+(defalias VPair (TFn [x]
+                  (t/I (t/Vec x)
+                       (CountRange 2))))
+(defalias Field (U t/Keyword (VPair t/Keyword)))
+(ann update-fields [Query (t/Vec Field) -> Query])
 (defn- update-fields [query fs]
   (let [[first-cur] (:fields query)]
     (if (= first-cur ::*)
       (assoc query :fields fs)
       (update-in query [:fields] utils/vconcat fs))))
 
+(ann fields [Query Field * -> Query])
 (defn fields
   "Set the fields to be selected in a query. Fields can either be a keyword
   or a vector of two keywords [field alias]:
@@ -283,6 +378,7 @@
   ([query field]
    (order query field :ASC)))
 
+(ann values [Query (U t/HMap (t/Vec t/HMap)) -> Query])
 (defn values
   "Add records to an insert clause. values can either be a vector of maps or a
   single map.
